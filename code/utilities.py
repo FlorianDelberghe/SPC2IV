@@ -198,6 +198,7 @@ def save_volume(volume, folder_path, filename, axis=0, bit_depth=8, **kwargs):
     elif file_format == 'tif':
         #TODO change main axis
         print("Saving: {}".format(os.path.join(folder_path, filename)))
+        volume = np.swapaxes(volume[:, ::-1,::-1], 1,2)
         tifffile.imsave(os.path.join(folder_path, filename), rescale(volume, bit_depth))
 
     elif file_format == 'pkl':

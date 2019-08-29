@@ -53,7 +53,7 @@ def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='l
 
     # New window params after trials
     windows_lin = {'lung': (560., 80.), 'soft': (570., 950.), 'bone': (400., 1100.)}
-    # windows_sig = {'lung': (150., -650.), 'soft': (55., 45.), 'bone': (65., 200.)} 
+    windows_sig = {'lung': (150., -650.), 'soft': (55., 45.), 'bone': (65., 200.)} 
 
     print("Rescaling image using {!r} method".format(method))
 

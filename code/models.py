@@ -625,7 +625,7 @@ class BasicCycleGAN(CycleGAN):
 
             # Predicts and saves the test set
             utilities.save_volume(self.predict_volume(self.data_loader.load_test('IV'), 'IV'),
-                "models/{}".format(self.dataset_name), 'final_spc_pred.tif', bit_depth=1326)
+                "models/{}".format(self.dataset_name), 'final_spc_pred.tif', bit_depth=32)
             utilities.save_volume(self.predict_volume(self.data_loader.load_test('SPC'), 'SPC'),
                 "models/{}".format(self.dataset_name), 'final_iv_pred.tif', bit_depth=32)
 

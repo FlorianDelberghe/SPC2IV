@@ -178,7 +178,7 @@ class DataLoaderCT(DataLoader):
                 return normalize(np.expand_dims(image, axis=-1), bit_depth)
 
         elif self.n_channels == 2:
-            return normalize(tifffile.imread(filepath)[..., 1:], bit_depth)
+            return normalize(tifffile.imread(filepath)[...,1:], bit_depth)
         elif self.n_channels == 3:
             return normalize(tifffile.imread(filepath), bit_depth)
         else:
