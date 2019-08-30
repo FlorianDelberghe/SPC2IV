@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import skimage.external.tifffile as tifffile
 from pystackreg import StackReg
+import SimpleITK as sitk
 
 
 def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='linear', contrast=['lung', 'soft', 'bone']):

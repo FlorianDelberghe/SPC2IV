@@ -46,19 +46,10 @@ def main():
     patients = utilities.load_patient_path(DICOM_PATH)
 
     for i, patient in enumerate(patients):
-        if i >= 10: break
+        if i >= 5: break
 
         spc_test, spc_reader = utilities.load_dcm_serie(patient['spc'], True)
         iv_test, iv_reader = utilities.load_dcm_serie(patient['iv'], True)
-
-        # for key in spc_reader.GetMetaDataKeys(1):
-        #     print(key, ': ', spc_reader.GetMetaData(1, key))
-
-        # utilities.save2dicom(spc_test, spc_reader, 'figures/test_dicom/', 'test_dcm')
-
-        # [z,x,y]
-        # spc_test = np.swapaxes(sitk.GetArrayFromImage(spc_test), 1,2)[:-1]
-        # iv_test = np.swapaxes(sitk.GetArrayFromImage(iv_test), 1,2)[:-1]
 
         spc_test = sitk.GetArrayFromImage(spc_test)[:-1]
         iv_test = sitk.GetArrayFromImage(iv_test)[:-1]
@@ -91,8 +82,13 @@ def main():
         spc_pred = spc_pred.mean(axis=3)
         iv_pred = iv_pred.mean(axis=3)
 
-        utilities.save2nifti(spc_pred, np.eye(4), 'figures/', 'spc_pred_{}.nii'.format(patient['id']))
-        utilities.save2nifti(iv_pred, np.eye(4), 'figures/', 'iv_pred_{}.nii'.format(patient['id']))
+        # utilities.save2nifti(spc_pred, np.eye(4), 'figures/', 'spc_pred_{}.nii'.format(patient['id']))
+        # utilities.save2nifti(iv_pred, np.eye(4), 'figures/', 'iv_pred_{}.nii'.format(patient['id']))
+
+        utilities.save2dicom(sitk.GetImageFromArray(spc_pred.astype('uint16')), iv_reader, 'ABDO SPC_PRED 2mm',
+                             "figures/dicom/SPC_pred_{}".format(patient['id']), "spc_pred_{}.nii".format(patient['id']))
+        utilities.save2dicom(sitk.GetImageFromArray(iv_pred.astype('uint16')), spc_reader, 'ABDO IV_PRED 2mm',
+                             "figures/dicom/IV_pred_{}".format(patient['id']), "iv_pred_{}.nii".format(patient['id']))
 
 
 if __name__ == '__main__':

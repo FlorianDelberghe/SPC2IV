@@ -1,6 +1,7 @@
 import json
 import os
 import pickle
+import time
 
 import matplotlib.pyplot as plt
 import nibabel as nib
@@ -240,49 +241,69 @@ def load_dcm_serie(serie_path, return_reader=False):
         return dcm_serie
 
 
-def save2dicom(volume, reader,  folder_path, fileprefix):
+def save2dicom(volume, reader, serie_description, folder_path, fileprefix):
+    """Saves sitk image volume to dicom
+        PARAMS:
+
+
+    """
+
+    create_dir(folder_path)
 
     writer = sitk.ImageFileWriter()
     writer.KeepOriginalImageUIDOn()
 
-    # # Copy relevant tags from the original meta-data dictionary (private tags are also
-    # # accessible).
-    # tags_to_copy = ["0010|0010", # Patient Name
-    #                 "0010|0020", # Patient ID
-    #                 "0010|0030", # Patient Birth Date
-    #                 "0020|000D", # Study Instance UID, for machine consumption
-    #                 "0020|0010", # Study ID, for human consumption
-    #                 "0008|0020", # Study Date
-    #                 "0008|0030", # Study Time
-    #                 "0008|0050", # Accession Number
-    #                 "0008|0060"  # Modality
-    # ]
+    # Copy relevant tags from the original meta-data dictionary (private tags are also
+    # accessible).
+    tags_to_copy = ["0010|0010", # Patient Name
+                    "0010|0020", # Patient ID
+                    "0010|0030", # Patient Birth Date
+                    "0020|000D", # Study Instance UID, for machine consumption
+                    "0020|0010", # Study ID, for human consumption
+                    "0008|0020", # Study Date
+                    "0008|0030", # Study Time
+                    "0008|0050", # Accession Number
+                    "0008|0060"  # Modality
+                    ]
 
-    # modification_time = time.strftime("%H%M%S")
-    # modification_date = time.strftime("%Y%m%d")
+    modification_time = time.strftime("%H%M%S")
+    modification_date = time.strftime("%Y%m%d")
 
-    # # Copy some of the tags and add the relevant tags indicating the change.
-    # # For the series instance UID (0020|000e), each of the components is a number, cannot start
-    # # with zero, and separated by a '.' We create a unique series ID using the date and time.
-    # # tags of interest:
-    # direction = filtered_image.GetDirection()
-    # series_tag_values = [(k, series_reader.GetMetaData(0,k)) for k in tags_to_copy if series_reader.HasMetaDataKey(0,k)] + \
-    #                 [("0008|0031",modification_time), # Series Time
-    #                 ("0008|0021",modification_date), # Series Date
-    #                 ("0008|0008","DERIVED\\SECONDARY"), # Image Type
-    #                 ("0020|000e", "1.2.826.0.1.3680043.2.1125."+modification_date+".1"+modification_time), # Series Instance UID
-    #                 ("0020|0037", '\\'.join(map(str, (direction[0], direction[3], direction[6],# Image Orientation (Patient)
-    #                                                     direction[1],direction[4],direction[7])))),
-    #                 ("0008|103e", series_reader.GetMetaData(0,"0008|103e") + " Processed-SimpleITK")] # Series Description
+    # Copy some of the tags and add the relevant tags indicating the change.
+    # For the series instance UID (0020|000e), each of the components is a number, cannot start
+    # with zero, and separated by a '.' We create a unique series ID using the date and time.
+    # tags of interest:
+    direction = volume.GetDirection()
+    series_tag_values = [(k, reader.GetMetaData(0,k)) for k in tags_to_copy if reader.HasMetaDataKey(0,k)] + \
+        [("0008|0031", modification_time),  # Series Time
+         ("0008|0021", modification_date),  # Series Date
+         ("0008|0008", "DERIVED\\SECONDARY\\GANPRED"),  # Image Type
+         ("0020|000e", "1.2.826.0.1.3680043.2.1125."+modification_date + \
+          ".1"+modification_time),  # Series Instance UID
+         ("0020|0037", '\\'.join(map(str, (direction[0], direction[3], direction[6],  # Image Orientation (Patient)
+                                           direction[1], direction[4], direction[7])))),
+         ("0008|103e", serie_description),  # Series Description
+         ("0018|0050", str(volume.GetSpacing()[-1])), # Slice Thickness
+         ("0028|1052", str(-1024)), # Rescale Intercept
+         ("0028|1053", str(1.0)) # Rescale Slope
+         ]
 
-    for i in range(0, volume.GetDepth()):
-        image_slice = volume[:,:,-i]
+    print("Saving to {}".format(folder_path))
+    for i in range(volume.GetDepth()):
+        image_slice = volume[:,:,i]
+
         # Tags shared by the series.
-        for tag in reader.GetMetaDataKeys(i):
-            image_slice.SetMetaData(tag, reader.GetMetaData(i, tag))
+        for tag, value in series_tag_values:
+            image_slice.SetMetaData(tag, value)
 
-    #     # Write to the output directory and add the extension dcm, to force writing in DICOM format.
-        writer.SetFileName(os.path.join(folder_path, "{}_{}.dcm".format(fileprefix, i)))
+        # Slice specific tags.
+        image_slice.SetMetaData("0008|0012", time.strftime("%Y%m%d")) # Instance Creation Date
+        image_slice.SetMetaData("0008|0013", time.strftime("%H%M%S")) # Instance Creation Time
+        image_slice.SetMetaData("0020|0032", '\\'.join(map(str,volume.TransformIndexToPhysicalPoint((0,0,i))))) # Image Position (Patient)
+        image_slice.SetMetaData("0020|0013", str(i)) # Instance Number
+
+        # Write to the output directory and add the extension dcm, to force writing in DICOM format.
+        writer.SetFileName(os.path.join("{}/{}_{}.dcm".format(folder_path, fileprefix, str(i))))
         writer.Execute(image_slice)
 
 
@@ -294,7 +315,6 @@ def save2nifti(volume, affine_mat, out_folder, filename):
     volume[volume > 2**15-1] = 2**15-1
 
     # Axis in the right order for nifti format
-    # volume = np.swapaxes(volume, 1, 2) #[z,x,y] -> [z,y,x]
     volume = np.swapaxes(volume, 0, 2) #[z,y,x] -> [x,y,z]
     volume = volume[::-1,::-1] #[x,y,z] -> [-x,-y,z]
 
