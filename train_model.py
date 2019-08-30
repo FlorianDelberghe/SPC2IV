@@ -24,7 +24,7 @@ def main():
     # Training parameters
     params = {
         # Image specifics
-        'input_res': (512, 512), 'n_channels': 2, 'dataset_name': 'spc2iv', 'data_contrast': 'coreg_sig', 'load_from': 'DICOM'
+        'input_res': (512, 512), 'n_channels': 2, 'dataset_name': 'spc2iv', 'data_contrast': 'coreg_sig', 'load_from': 'DICOM',
         # GAN training
         'D_loss_weight': 2.0, 'cycle_loss_weight': 10.0, 'id_loss_weight': 1.0, 'pair_loss_weight': 2.0, 'normalization': 'batch',
         # Generator

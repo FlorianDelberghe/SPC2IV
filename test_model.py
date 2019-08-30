@@ -30,7 +30,7 @@ def main():
     # Training parameters
     params = {
         # Image specifics
-        'input_res': (512, 512), 'n_channels': 2, 'dataset_name': 'spc2iv', 'data_contrast': 'coreg_sig',
+        'input_res': (512, 512), 'n_channels': 2, 'dataset_name': 'spc2iv', 'data_contrast': 'coreg_sig', 'load_from': 'DICOM',
         # GAN layers
         'g_filters': 48, 'd_filters': 64, 'D_loss': 'mse', 'D_loss_weight': 1.0, 'cycle_loss_weight': 10.0, 'id_loss_weight': 1.0, 'pair_loss_weight': 2.0,
         'architecture': 'UNet', 'out_activation': 'tanh', 'transformer_layers': 9, 'D_output': 'patch',
@@ -46,7 +46,7 @@ def main():
     patients = utilities.load_patient_path(DICOM_PATH)
 
     for i, patient in enumerate(patients):
-        if i >= 4: break
+        if i >= 10: break
 
         spc_test, spc_reader = utilities.load_dcm_serie(patient['spc'], True)
         iv_test, iv_reader = utilities.load_dcm_serie(patient['iv'], True)
