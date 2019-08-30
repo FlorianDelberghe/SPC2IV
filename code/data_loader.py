@@ -7,7 +7,8 @@ import scipy
 import SimpleITK as sitk
 import skimage.external.tifffile as tifffile
 
-import processing, utilities
+import code.processing as processing
+import code.utilities as utilities
 
 
 class DataLoader():
@@ -191,7 +192,7 @@ class DataLoaderCT(DataLoader):
 
 class DataLoaderDICOM(DataLoader):
 
-    def __init__(self, data_path, image_res=(512, 512), channels=['soft'], windowing_method='sigmoid', one_in_x=10):
+    def __init__(self, data_path, image_res=(512, 512), channels=['soft'], windowing_method='sigmoid', one_in_x=10, **kwargs):
         super(DataLoaderDICOM, self).__init__('DataLoaderDICOM')
 
         self.data_path = data_path
@@ -284,11 +285,10 @@ class DataLoaderDICOM(DataLoader):
         return np.concatenate(data, axis=0)
 
 
-    def load_batch(self, batch_size=1):
+    def load_batch(self, batch_size=1, paired=False):
         """Creates a generator that yields a single batch of the data for both contrasts"""
 
         self.n_batches = int(min(len(self.tr_spc_files), len(self.tr_iv_files)) /batch_size)
-        print(len(self.tr_spc_files), len(self.tr_iv_files),self.n_batches)
         total_samples = self.n_batches * batch_size
 
         spc_ind = np.random.choice(len(self.tr_spc_files), total_samples)
@@ -309,7 +309,8 @@ class DataLoaderDICOM(DataLoader):
         reader.SetFileName(filepath)
         image = reader.Execute()
         
-        image = np.swapaxes(sitk.GetArrayFromImage(image), 1,2)        
+        # image = np.swapaxes(sitk.GetArrayFromImage(image), 1,2)        
+        image = sitk.GetArrayFromImage(image)
         # NO need for rescale_intercept when loading with sitk
         image = processing.tissue_contrast(image, rescale_intercept=-0, rescale_slope=1., 
                                            method=self.windowing_method, contrast=self.channels)

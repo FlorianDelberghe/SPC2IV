@@ -1,0 +1,15 @@
+# Folders to ommit:
+.*/
+data/images/*
+data/dicom/*
+figures/
+models/
+images/
+
+# File types:
+*.dcm
+*.nii
+*.log
+.*
+
+# Files

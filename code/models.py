@@ -29,8 +29,8 @@ from keras.regularizers import l1
 from keras_contrib.layers.normalization.instancenormalization import \
     InstanceNormalization
 
-import utilities
-from data_loader import DataLoaderCT
+import code.utilities as utilities
+from code.data_loader import DataLoaderCT, DataLoaderDICOM
 
 plt.rcParams['image.cmap'] = 'gray'
 
@@ -61,7 +61,14 @@ class CycleGAN():
         # Configure data loader
         self.dataset_name = kwargs['dataset_name']
         self.data_contrast = kwargs['data_contrast']
-        self.data_loader = DataLoaderCT('../data/images/{}'.format(self.data_contrast), image_res=(self.img_rows, self.img_cols), n_channels=self.channels)
+        if kwargs['load_from'].lower() == 'png':
+            #Loads from PNG
+            self.data_loader = DataLoaderCT('data/images/{}'.format(self.data_contrast), image_res=(self.img_rows, self.img_cols), n_channels=self.channels)
+        elif kwargs['load_from'].lower() == 'dicom':
+            #Loads from dicom and windowing
+            self.data_loader = DataLoaderDICOM('data/dicom/', image_res=(self.img_rows, self.img_cols), channels=['soft', 'bone'], one_in_x=10)
+        else:
+            raise ValueError("Can't load from {!r}".format(kwargs['load_from']))
 
         # Sets number of filters for Generator and Discriminator
         self.gf = kwargs['g_filters']
@@ -194,10 +201,11 @@ class CycleGAN():
         d3 = conv2d(d2, self.gf*4)
         d4 = conv2d(d3, self.gf*8)
 
-        if transformer_layers is not None or transformer_layers < 0:
-            # Transforming then Upsampling
-            res = resnet_transformer(d4, self.gf*8, transformer_layers)
-            u1 = deconv2d(res, d3, self.gf*4, architecture=architecture)
+        if transformer_layers is not None:
+            if transformer_layers > 0:
+                # Transforming then Upsampling
+                res = resnet_transformer(d4, self.gf*8, transformer_layers)
+                u1 = deconv2d(res, d3, self.gf*4, architecture=architecture)
         else:
             # Upsampling only
             u1 = deconv2d(d4, d3, self.gf*4, architecture=architecture)
@@ -575,9 +583,9 @@ class BasicCycleGAN(CycleGAN):
         for epoch in range(starting_epoch, epochs):
             self.current_epoch = epoch
             self.update_lr(self.combined.optimizer, self.lr(epoch)) 
-
+            
             for batch_i, (imgs_A, imgs_B) in enumerate(self.data_loader.load_batch(batch_size, paired=False)):       
-                
+
                 # Train Discriminators
                 # Translate images to opposite domain
                 fake_B = self.g_AB.predict(imgs_A)
@@ -604,7 +612,7 @@ class BasicCycleGAN(CycleGAN):
                 elapsed_time = datetime.datetime.now() - start_time
 
                 # Prints the progress
-                print ("[Epoch {:d}/{:d}] [Batch {:d}/{:d}] [D loss:{:8.5f}, acc:{:3.0f}] [G loss: {:8.5f}, adv: {:8.5f}, recon: {:8.5f}, id: {:8.5f}] time: {:s}".format(
+                print ("[Epoch {:d}/{:d}] [Batch {:d}/{:d}] [D loss:{:8.5f}, acc:{:3.0f}%] [G loss: {:8.5f}, adv: {:8.5f}, recon: {:8.5f}, id: {:8.5f}] time: {:s}".format(
                     epoch+1, epochs, batch_i+1, self.data_loader.n_batches //self.data_loader.one_in_x, d_loss[0], 100*d_loss[1], 
                     g_loss[0], np.mean(g_loss[1:3]), np.mean(g_loss[3:5]), np.mean(g_loss[5:6]), str(elapsed_time)))
 
@@ -617,7 +625,7 @@ class BasicCycleGAN(CycleGAN):
                 if epoch %5 == 0 and epoch > 0:
                     self.save("models/{}/{}_epoch_{}".format(self.dataset_name, self.name, epoch))
                 #TODO rolling averages of the losses to be more accurate
-                self.plot_progress(epoch+1, d_loss[0], d_loss[1], g_loss[0], np.mean(g_loss[1:3]), np.mean(g_loss[3:5]))
+                self.plot_progress(epoch, d_loss[0], d_loss[1], g_loss[0], np.mean(g_loss[1:3]), np.mean(g_loss[3:5]))
                 self.data_loader.update_val()
         else:
             # Saves final model

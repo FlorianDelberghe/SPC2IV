@@ -40,12 +40,14 @@ def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='l
 
     def inv_sig_rescale(volume, width, level):
         """Revertes the sigmoid rescaling given 'level' and 'width' """
+        # float32 precision
+        # epsilon32 = np.finfo(np.float32).eps
         # float64 precision
         epsilon = np.finfo(np.float).eps
         # Shifts the extramas values {0, 1} by epsilon to avoid ZeroDivision and log(0)
-        volume[volume <= 0] = epsilon
-        volume[volume >= 1] = 1 -epsilon
-        return np.around((-width *np.log(1./volume -1) +level), decimals=0)
+        volume[volume <= epsilon] = epsilon
+        volume[volume >= 1 -epsilon] = 1 -epsilon
+        return (-width *np.log(1./volume -1) +level)
 
     #(win_width, win_level)
     windows_lin = {'lung': (1800., -600.), 'soft': (400., 50.), 'bone': (1800., 400.)}
@@ -55,7 +57,7 @@ def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='l
     windows_lin = {'lung': (560., 80.), 'soft': (570., 950.), 'bone': (400., 1100.)}
     windows_sig = {'lung': (150., -650.), 'soft': (55., 45.), 'bone': (65., 200.)} 
 
-    print("Rescaling image using {!r} method".format(method))
+    # print("Rescaling image using {!r} method".format(method))
 
     if method == 'linear':
         #Rescaling to real Houndsfield Units

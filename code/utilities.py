@@ -11,7 +11,7 @@ import skimage.external.tifffile as tifffile
 import skimage.io
 from matplotlib.widgets import Button, RadioButtons, Slider
 
-from processing import tissue_contrast
+from code.processing import tissue_contrast
 
 
 def create_dir(path):
@@ -184,10 +184,10 @@ def save_volume(volume, folder_path, filename, axis=0, bit_depth=8, **kwargs):
 
 
     file_format = filename.split('.')[-1] if filename.split('.')[-1] in ['png', 'tif', 'pkl'] else kwargs['file_format']
+    create_dir(folder_path)
 
     # Saves volume to serie of .png images in a new folder
     if file_format == 'png':
-        create_dir(folder_path)
         slc = [slice(None)] *len(volume.shape)
         for i in range(volume.shape[axis]):
             slc[axis] = slice(i,i+1)
@@ -240,8 +240,50 @@ def load_dcm_serie(serie_path, return_reader=False):
         return dcm_serie
 
 
-def save2dicom(volume, folder_path, fileprefix, json_dict_path):
-    raise NotImplementedError
+def save2dicom(volume, reader,  folder_path, fileprefix):
+
+    writer = sitk.ImageFileWriter()
+    writer.KeepOriginalImageUIDOn()
+
+    # # Copy relevant tags from the original meta-data dictionary (private tags are also
+    # # accessible).
+    # tags_to_copy = ["0010|0010", # Patient Name
+    #                 "0010|0020", # Patient ID
+    #                 "0010|0030", # Patient Birth Date
+    #                 "0020|000D", # Study Instance UID, for machine consumption
+    #                 "0020|0010", # Study ID, for human consumption
+    #                 "0008|0020", # Study Date
+    #                 "0008|0030", # Study Time
+    #                 "0008|0050", # Accession Number
+    #                 "0008|0060"  # Modality
+    # ]
+
+    # modification_time = time.strftime("%H%M%S")
+    # modification_date = time.strftime("%Y%m%d")
+
+    # # Copy some of the tags and add the relevant tags indicating the change.
+    # # For the series instance UID (0020|000e), each of the components is a number, cannot start
+    # # with zero, and separated by a '.' We create a unique series ID using the date and time.
+    # # tags of interest:
+    # direction = filtered_image.GetDirection()
+    # series_tag_values = [(k, series_reader.GetMetaData(0,k)) for k in tags_to_copy if series_reader.HasMetaDataKey(0,k)] + \
+    #                 [("0008|0031",modification_time), # Series Time
+    #                 ("0008|0021",modification_date), # Series Date
+    #                 ("0008|0008","DERIVED\\SECONDARY"), # Image Type
+    #                 ("0020|000e", "1.2.826.0.1.3680043.2.1125."+modification_date+".1"+modification_time), # Series Instance UID
+    #                 ("0020|0037", '\\'.join(map(str, (direction[0], direction[3], direction[6],# Image Orientation (Patient)
+    #                                                     direction[1],direction[4],direction[7])))),
+    #                 ("0008|103e", series_reader.GetMetaData(0,"0008|103e") + " Processed-SimpleITK")] # Series Description
+
+    for i in range(0, volume.GetDepth()):
+        image_slice = volume[:,:,-i]
+        # Tags shared by the series.
+        for tag in reader.GetMetaDataKeys(i):
+            image_slice.SetMetaData(tag, reader.GetMetaData(i, tag))
+
+    #     # Write to the output directory and add the extension dcm, to force writing in DICOM format.
+        writer.SetFileName(os.path.join(folder_path, "{}_{}.dcm".format(fileprefix, i)))
+        writer.Execute(image_slice)
 
 
 def save2nifti(volume, affine_mat, out_folder, filename):
@@ -252,12 +294,13 @@ def save2nifti(volume, affine_mat, out_folder, filename):
     volume[volume > 2**15-1] = 2**15-1
 
     # Axis in the right order for nifti format
-    volume = np.swapaxes(volume, 1, 2) #[z,x,y] -> [z,y,x]
+    # volume = np.swapaxes(volume, 1, 2) #[z,x,y] -> [z,y,x]
     volume = np.swapaxes(volume, 0, 2) #[z,y,x] -> [x,y,z]
     volume = volume[::-1,::-1] #[x,y,z] -> [-x,-y,z]
 
     # Converting to NIFTI and saving
     volume_nifti = nib.Nifti1Image(volume.astype('uint16'), affine_mat)
+    create_dir(out_folder)
     print("Saving to : {}".format(os.path.join(out_folder, filename)))
     volume_nifti.to_filename(os.path.join(out_folder, filename))
 
