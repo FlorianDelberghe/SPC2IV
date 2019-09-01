@@ -157,20 +157,23 @@ def save_volume(volume, folder_path, filename, axis=0, bit_depth=8, **kwargs):
 
         elif bit_depth == 8:
             array_dtype = 'uint8'
+            image = np.squeeze(image)
 
             # Rescales image from [min, max] -> [0, 255]
             try:
-                assert image.min() >= 0, "Min of img is: {}, clipping pixle values".format(image.min())
+                assert image.min() >= 0, "Min of img is: {}, clipping pixel values".format(image.min())
             except AssertionError:
                 image[image < 0] = 0
             finally:
-                if len(image.shape) == 2 or (len(image.shape) == 3 and image.shape[-1] == 1):
-                    # One channel image
+                # One channel image
+                if len(image.shape) == 2:                    
                     return (image /image.max() *(2**bit_depth -1)).astype(array_dtype)
-                elif len(image.shape) == 3 and volume.shape[-1] == 3:
-                    # Multi channel image
+
+                # Multi channel image
+                elif len(image.shape) == 3 and volume.shape[-1] == 3:                    
                     norm_channels = [(image[...,i] /image[...,i].max() *(2**bit_depth -1)).astype(array_dtype) for i in range(image.shape[-1])]
                     return np.stack(norm_channels, axis=-1)
+
                 else:
                     raise ValueError("Dimension error for volume n_channel(s): {}".format(image.shape[-1]))
 
@@ -211,7 +214,7 @@ def save_volume(volume, folder_path, filename, axis=0, bit_depth=8, **kwargs):
         raise ValueError("Unsupported file format: {}".format(file_format))
 
 
-def load_dcm_serie(serie_path, return_reader=False):
+def load_dcm_serie(serie_path, return_reader=False, return_type='sitk'):
     """Loads a DICOM serie using SimpleITK
         PARAMS: 
             serie_path (str): path to the requiered serie

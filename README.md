@@ -27,3 +27,8 @@ testing the models output
 python test_models.py
 ```
 
+If you do not want to use DICOM images for concerns of speed run:
+
+```
+python dicom2png.py <data_path> <output_path>
+```
