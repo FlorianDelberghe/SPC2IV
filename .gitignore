@@ -1,8 +1,7 @@
 # Folders to ommit:
 .*/
 code/__pycache__
-data/images/*
-data/dicom/*
+data/*
 figures/
 models/
 images/
