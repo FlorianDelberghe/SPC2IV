@@ -22,22 +22,20 @@ def main():
         create_dir(OUT_PATH)
 
     patients = load_patient_path(DATA_PATH)
-    # Saves one image in x
-    one_in_x = 1
+    # Saves one every sampling interval
+    sampling = 1
+    contrasts = ['spc', 'art', 'iv', 'tard']
 
     for patient in patients:
+        for cont in contrasts:
+            
+            c_volume = load_dcm_serie(patient[cont.lower()])
+            c_volume = sitk.GetArrayFromImage(c_volume)
 
-        spc_volume = load_dcm_serie(patient['spc'])
-        iv_volume = load_dcm_serie(patient['iv'])
+            c_volume_cont = tissue_contrast(c_volume, rescale_intercept=0., method='sigmoid', contrast=['lung', 'soft', 'bone'])
 
-        spc_volume = sitk.GetArrayFromImage(spc_volume)
-        iv_volume = sitk.GetArrayFromImage(iv_volume)
-
-        spc_volume_cont = tissue_contrast(spc_volume, rescale_intercept=0., method='sigmoid', contrast=['lung', 'soft', 'bone'])
-        iv_volume_cont = tissue_contrast(iv_volume, rescale_intercept=0., method='sigmoid', contrast=['lung', 'soft', 'bone'])
-
-        save_volume(spc_volume_cont[::one_in_x], "{}/{}/SPC".format(str(OUT_PATH), patient['id']), "{}_SPC.png".format(patient['id']), bit_depth=8)
-        save_volume(iv_volume_cont[::one_in_x], "{}/{}/IV".format(str(OUT_PATH), patient['id']), "{}_IV.png".format(patient['id']), bit_depth=8)
+            save_volume(c_volume_cont[::sampling], "{}/{}/{}".format(str(OUT_PATH), patient['id'], cont.upper()),
+                        "{}_{}.png".format(patient['id'], cont.upper()), bit_depth=8)
 
 
 if __name__ == '__main__':

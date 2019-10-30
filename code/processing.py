@@ -8,7 +8,7 @@ from pystackreg import StackReg
 import SimpleITK as sitk
 
 
-def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='linear', contrast=['lung', 'soft', 'bone']):
+def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='linear', contrast=['lung', 'soft', 'bone'], verbose=False):
     """Rescales contrast of volume to [0, 1] by windowing or reverses sigmoid windowing
         INPUTS:
             volume (np.array): input stack of images to rescale, dims don't matter for the windowing, for sigmoid recontruction last dim must be channels (contrasts)
@@ -21,12 +21,15 @@ def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='l
             method (str): contrast method for rescaling/reconstruction, must be in ['linear', 'sigmoid', 'inv_sigmoid']
 
             contrasts (list(str)): list of contrasts that will be conputed/reverted must contain: 'lung', 'soft', 'bone' exclusively
+
+            verbose (bool): Whether to print the used method (default=False)
         
         OUTPUTS:
             conts/inv_conts (list(np.array)): list of contrast/restored images rescaled in the desirered windows"""
 
     def lin_rescale(volume, width, level):
-        """Rescales volume pixel values linearly [level -width/2, level +width/2] -> [0, 1] """
+        """Rescales volume pixel values linearly [level -width/2, level +width/2] -> [0, 1]"""
+
         min_level, max_level = level -width/2, level +width/2
         # Linear rescaling fo pix values
         rescaled_volume = (volume-min_level) /(max_level-min_level)
@@ -36,11 +39,13 @@ def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='l
         return rescaled_volume
 
     def sigmoid_rescale(volume, width, level):
-        """Rescales volume pixel values with sigmoid around 'level' with window size proprotional to 'width' """
+        """Rescales volume pixel values with sigmoid around 'level' with window size proprotional to 'width'"""
+
         return 1./(1.+np.exp(-(volume-level)/width))
 
     def inv_sig_rescale(volume, width, level):
         """Revertes the sigmoid rescaling given 'level' and 'width' """
+
         # float32 precision
         # epsilon32 = np.finfo(np.float32).eps
         # float64 precision
@@ -58,7 +63,8 @@ def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='l
     windows_lin = {'lung': (560., 80.), 'soft': (570., 950.), 'bone': (400., 1100.)}
     windows_sig = {'lung': (150., -650.), 'soft': (55., 45.), 'bone': (65., 200.)} 
 
-    # print("Rescaling image using {!r} method".format(method))
+    if verbose:
+        print("Rescaling image using {!r} method".format(method))
 
     if method == 'linear':
         #Rescaling to real Houndsfield Units
@@ -80,7 +86,7 @@ def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='l
         inv_conts = []
         for i, c in enumerate(contrast):
             inv_cont = inv_sig_rescale(volume[...,i].astype('float64'), windows_sig[c][0], windows_sig[c][1])
-            # Rescaling from Houndsfield Units to uint range /!\ Values may be <0 due to numerical imprecisions best to clip outside
+            # Rescaling from Houndsfield Units to uint range /!\ Values may be < 0 due to numerical imprecisions best to clip the values later
             inv_cont /= float(rescale_slope)
             inv_cont -= rescale_intercept                
             inv_conts.append(inv_cont)
@@ -218,6 +224,7 @@ def coregister(ref_volume, moving_volume, fill_value=-1024, resampling_only=Fals
 
             sys.stdout = defauld_stdout
             
+        # Computes the projection of the moving image to the ref space by computed coreg transform
         moving_coreg = sitk.Resample(moving_resampled,
                                      optimized_transform, sitk.sitkLinear,
                                      fill_value, ref_volume.GetPixelID())

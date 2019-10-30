@@ -10,7 +10,6 @@ import pydicom
 import SimpleITK as sitk
 import skimage.external.tifffile as tifffile
 import skimage.io
-from matplotlib.widgets import Button, RadioButtons, Slider
 
 from code.processing import tissue_contrast
 
@@ -29,7 +28,7 @@ def create_dir(path):
 
 def load_patient_path(data_path):
     """Loads all the patients folders with id and contrast paths
-        INPUTS:
+        PARAMS:
             data_path (str): path to the root of the patient files containing the dicom series
 
         RETURNS:
@@ -38,6 +37,7 @@ def load_patient_path(data_path):
     print("Loading patients' data paths...")
     patients = []
     patient_folders = (folder for folder in os.listdir(data_path) if not '.' in folder)    
+
     for patient_folder in patient_folders:
 
         patient = {}
@@ -45,8 +45,9 @@ def load_patient_path(data_path):
         patient['path'] = os.path.join(data_path, patient_folder)
 
         patient_contrasts = (folder for folder in os.listdir(os.path.join(data_path, patient_folder)))
-        for patient_contrast in patient_contrasts:
 
+        for patient_contrast in patient_contrasts:
+            # Gets the path for the different contrasts
             if 'spc' in patient_contrast.lower() or 'sans iv' in patient_contrast.lower():
                 patient['spc'] = os.path.join(data_path, patient_folder, patient_contrast)
             elif 'art' in patient_contrast.lower():
@@ -57,6 +58,7 @@ def load_patient_path(data_path):
                 patient['tard'] = os.path.join(data_path, patient_folder, patient_contrast)
 
         patients.append(patient)
+
     return patients
 
 
@@ -77,6 +79,7 @@ def load_dcm_meta(filepath, contrast):
     metadata['contrast'] = contrast.upper()
     metadata['affine_transform'] = affine_transform
 
+    # Sets the other error prone metadata with 'error handling'
     for key, value in zip(['rescale_intercept', 'rescale_slope', 'id'], 
                           ['ds.RescaleIntercept', 'ds.RescaleSlope', 'ds.PatientID']):
         try:
@@ -89,30 +92,36 @@ def load_dcm_meta(filepath, contrast):
 
 
 def load_img_volumes(patient_dict, contrast=['spc', 'art', 'iv', 'tard']):
-    """Loads all the dicom images for the 4 contrasts in the patient's folder"""
+    """Loads all the dicom images for the 4 contrasts in the patient's folder (Deprecated, use load_dcm_serie() instead)"""
 
     contrast_vol = []
+
     for c in contrast:
         if c in patient_dict.keys():
+
             c_vol = []
             dcm_files = [file for file in os.listdir(patient_dict[c]) if file.endswith('.dcm')]
             dcm_files.sort()
+
             for i, file in enumerate(dcm_files):
                 # Discards the first image of the serie
-                if i == 0: continue                    
+                if i == 0: continue          
+
                 elif i == 1:
-                    # Each folder should only contain 1 serie of images 2 means that there is a duplicate
+                    
                     current_serie = file[3:7]
                     #Loading serie metadata
                     
                     metadata = load_dcm_meta(os.path.join(patient_dict[c], file), c)
                     metadata.setdefault('id', patient_dict['id'])
 
+                # Each folder should only contain 1 serie of images 2 means that there is a duplicate
                 elif file[3:7] != current_serie:
                     print(r"/!\ Duplicate serie", end='')
                     break
 
                 print("\rLoading contrast {} for patient {} slice: {}".format(c, patient_dict['id'], i), end=' '*10)
+
                 try:
                     ds = pydicom.dcmread(os.path.join(patient_dict[c], file))
                     c_vol.append(ds.pixel_array)
@@ -131,7 +140,7 @@ def load_img_volumes(patient_dict, contrast=['spc', 'art', 'iv', 'tard']):
 
 def save_volume(volume, folder_path, filename, axis=0, bit_depth=8, **kwargs):
     """"Saves image volume to requiered format
-        INPUTS:
+        PARAMS:
             volume (np.array): image volume to save
             folder_path (str): folder in which to save the image
             filename (str): name of the file to be saved (acts as prefix for 'png' format)
@@ -142,7 +151,7 @@ def save_volume(volume, folder_path, filename, axis=0, bit_depth=8, **kwargs):
 
     def rescale(image, bit_depth):
         """Rescales pixel values in the correct range to save as images
-            INPUTS:
+            PARAMS:
                 image (np.array): array of positive values for bit_depth={8, 16}
                 
                 bit_depth (int): bit depth to return the image and deduce rescaling behavior
@@ -162,14 +171,17 @@ def save_volume(volume, folder_path, filename, axis=0, bit_depth=8, **kwargs):
             # Rescales image from [min, max] -> [0, 255]
             try:
                 assert image.min() >= 0, "Min of img is: {}, clipping pixel values".format(image.min())
+
+            # TODO AssertionError aren't reliable when debug=False (production)
             except AssertionError:
                 image[image < 0] = 0
+
             finally:
                 # One channel image
                 if len(image.shape) == 2:                    
                     return (image /image.max() *(2**bit_depth -1)).astype(array_dtype)
 
-                # Multi channel image
+                # Multi channels image
                 elif len(image.shape) == 3 and volume.shape[-1] == 3:                    
                     norm_channels = [(image[...,i] /image[...,i].max() *(2**bit_depth -1)).astype(array_dtype) for i in range(image.shape[-1])]
                     return np.stack(norm_channels, axis=-1)
@@ -186,7 +198,7 @@ def save_volume(volume, folder_path, filename, axis=0, bit_depth=8, **kwargs):
         else:
             raise ValueError("Wrong value for bit_depth: {} should be 8, 16, 32".format(bit_depth))
 
-
+    # Finds the wanted saving format
     file_format = filename.split('.')[-1] if filename.split('.')[-1] in ['png', 'tif', 'pkl'] else kwargs['file_format']
     create_dir(folder_path)
 
@@ -195,8 +207,9 @@ def save_volume(volume, folder_path, filename, axis=0, bit_depth=8, **kwargs):
         slc = [slice(None)] *len(volume.shape)
         for i in range(volume.shape[axis]):
             slc[axis] = slice(i,i+1)
-            print("\rSaving: {}_{}.png".format(filename, i+1), end=' '*10)
+            print("\rSaving: {}_{}.png".format(filename.split('.')[0], i+1), end=' '*10)
             tifffile.imsave(os.path.join(folder_path, "{}_{}.png".format(filename.split('.')[0], i+1)), rescale(volume[tuple(slc)], bit_depth))
+        print('')
 
     # Saves volume to tif
     elif file_format == 'tif':
@@ -313,7 +326,7 @@ def save2dicom(volume, reader, serie_description, folder_path, fileprefix):
 def save2nifti(volume, affine_mat, out_folder, filename):
     """Saves volume to nifti format"""
 
-    #Clipping the pixels values to positive int16 range
+    # Clipping the pixels values to positive int16 range
     volume[volume < 0] = 0
     volume[volume > 2**15-1] = 2**15-1
 
@@ -326,4 +339,3 @@ def save2nifti(volume, affine_mat, out_folder, filename):
     create_dir(out_folder)
     print("Saving to : {}".format(os.path.join(out_folder, filename)))
     volume_nifti.to_filename(os.path.join(out_folder, filename))
-

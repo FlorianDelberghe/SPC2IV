@@ -24,18 +24,18 @@ def main():
     # Training parameters
     params = {
         # Image specifics
-        'input_res': (512, 512), 'n_channels': 2, 'dataset_name': 'spc2iv', 'data_contrast': 'coreg_sig', 'load_from': 'DICOM',
+        'input_res': (512, 512), 'n_channels': 2, 'load_from': 'DICOM', 'data_process': 'coreg_sig', 'dataset_name': 'spc2iv', 'data_contrasts': ['spc', 'tard'],
         # GAN training
-        'D_loss_weight': 2.0, 'cycle_loss_weight': 10.0, 'id_loss_weight': 1.0, 'pair_loss_weight': 2.0, 'normalization': 'batch',
+        'D_loss_weight': 2.0, 'cycle_loss_weight': 10.0, 'id_loss_weight': 1.0, 'pair_loss_weight': 2.0, 'normalization': 'instance',
         # Generator
         'g_filters': 48, 'architecture': 'unet', 'out_activation': 'tanh', 'transformer_layers': 9, 
-        # DIcriminator
+        # Dicriminator
         'd_filters': 64, 'D_output': 'patch', 'D_loss': 'mse', 'D_out_activation': 'sigmoid',
         # Optimizer
         'initial_lr': 0.0002, 'start_epoch': 0, 'optimizer_scheduler': 'linear', 'cutoff_epoch': 40, 'max_epochs': 100,
         # Save the model and predict images also deletes what was in the previous output folder
         'save_state': True
-        }
+        }   
 
     gan = BasicCycleGAN(**params)
     print(gan)

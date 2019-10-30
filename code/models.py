@@ -36,12 +36,15 @@ plt.rcParams['image.cmap'] = 'gray'
 
 
 class CycleGAN():
+    """Mother class for the different types of GANs"""
 
     def __init__(self, name, **kwargs):
         """Sets the basic parameters that are common to all of the GANs"""
+
         self.name = name
+        # Default value on case they were no tset in kwargs
         defaults = {'save_state': False, 'input_res': (512,512), 'n_channels': 1, 
-                    'dataset_name': 'spc2iv', 'data_contrast': 'coreg_sig',
+                    'dataset_name': 'spc2iv', 'data_process': 'coreg_sig', 'data_contrasts': ['spc', 'iv'],
                     'g_filters': 32, 'd_filters': 64, 
                     'D_loss': 'mse', 'D_loss_weight': 1, 'cycle_loss_weight': 10.0,
                     'initial_lr': 0.0002, 'start_epoch': 0}
@@ -49,9 +52,9 @@ class CycleGAN():
         for key in defaults.keys():
             kwargs.setdefault(key, defaults[key])
 
-
         self.save_state = kwargs['save_state']
         self.del_out_dirs(**kwargs)
+
         # Input shape
         self.img_rows = kwargs['input_res'][0]
         self.img_cols = kwargs['input_res'][1]
@@ -60,13 +63,21 @@ class CycleGAN():
 
         # Configure data loader
         self.dataset_name = kwargs['dataset_name']
-        self.data_contrast = kwargs['data_contrast']
-        if kwargs['load_from'].lower() == 'png':
-            #Loads from PNG
-            self.data_loader = DataLoaderCT('data/images/{}'.format(self.data_contrast), image_res=(self.img_rows, self.img_cols), n_channels=self.channels)
+        self.data_process = kwargs['data_process']
+        self.data_contrasts = kwargs['data_contrasts']
+
+        #Loads from PNG
+        if kwargs['load_from'].lower() == 'png':            
+            self.data_loader = DataLoaderCT('data/images/{}'.format(self.data_process),
+                                            contrasts=self.data_contrasts, image_res=(self.img_rows, self.img_cols), 
+                                            n_channels=self.channels)
+
+        # Loads from dicom and windowing
         elif kwargs['load_from'].lower() == 'dicom':
-            #Loads from dicom and windowing
-            self.data_loader = DataLoaderDICOM('data/dicom/', image_res=(self.img_rows, self.img_cols), channels=['soft', 'bone'], one_in_x=10)
+            self.data_loader = DataLoaderDICOM('data/dicom/', contrasts=self.data_contrasts,
+                                               image_res=(self.img_rows, self.img_cols),
+                                               channels=['soft', 'bone'])
+
         else:
             raise ValueError("Can't load from {!r}".format(kwargs['load_from']))
 
@@ -84,20 +95,24 @@ class CycleGAN():
 
 
     def __call__(self, image, contrast):
-        """Predicts the output of the network on an image of given contrast"""        
+        """Predicts the output of the network on an image of given contrast (forward pass)"""        
 
         if len(image.shape) == 2:
             image = np.expand_dims(image, axis=[0,-1])
+
         elif len(image.shape) == 3:
             image = np.expand_dims(image, axis=0)
 
+        #TODO assertion error not reliable when debug=False
         assert image.shape[1:3] == self.img_shape[:2], "image shape: {} != self.image_res: {}".format(image.shape[1:3], self.img_shape[:2])
         assert image.shape[-1] == self.channels, "image channels: {} != self.channels: {}".format(image.shape[3], self.channels)
 
-        if contrast.lower() == 'spc':
+        if contrast.lower() == self.data_contrasts[0].lower():
             output = self.g_AB.predict(image)
-        elif contrast.lower() == 'iv':
+
+        elif contrast.lower() == self.data_contrasts[1].lower():
             output = self.g_BA.predict(image)
+
         else:
             raise NotImplementedError("'{}' is not a valid contrast, ...yet".format(contrast))
 
@@ -105,6 +120,8 @@ class CycleGAN():
 
 
     def __repr__(self):
+        """Returns str with usefull info about the params of the network"""
+
         s = "{}({})".format(self.__class__.__name__, '{}')
         for key, value in vars(self).items():
             if isinstance(value, (float, int, str, list, dict, tuple)):
@@ -116,9 +133,8 @@ class CycleGAN():
     def __str__(self):
         return self.__repr__()
 
-    def build_generator(self, out_activation='tanh',
-                        architecture='unet', transformer_layers=None,
-                        normalisation='instance', **kwargs):
+    def build_generator(self, out_activation='tanh', architecture='unet',
+                        transformer_layers=None, normalisation='instance', **kwargs):
         """Returns a custom cycleGAN generator given custom parameters
             PARAMS:
                 self (CycleGAN):
@@ -137,6 +153,7 @@ class CycleGAN():
 
         def conv2d(layer_input, filters, f_size=4):
             """Layers used during downsampling"""
+
             nonlocal Normalization
 
             d = Conv2D(filters, kernel_size=f_size, strides=2, padding='same')(layer_input)
@@ -149,6 +166,7 @@ class CycleGAN():
 
             def res_block(layer_input, filters, f_size=4):
                 """Res block used for the transformer"""
+
                 nonlocal Normalization
 
                 r = Conv2D(filters*2, kernel_size=f_size, strides=2, padding='same', activation='relu')(layer_input)
@@ -158,6 +176,7 @@ class CycleGAN():
 
                 r = Add()([r, layer_input])
                 r = Activation('relu')(r)
+
                 return r
 
             assert n_blocks > 0, "'n_blocks' must be a positive integer, is: {}".format(n_blocks)
@@ -175,7 +194,7 @@ class CycleGAN():
 
             u = UpSampling2D(size=2)(layer_input)
             u = Conv2D(filters, kernel_size=f_size, strides=1, padding='same', activation='relu')(u)
-            #TODO use LeakyReLU here
+            #TODO use LeakyReLU here ?
             if dropout_rate:
                 u = Dropout(dropout_rate)(u)
             u = Normalization()(u)
@@ -190,8 +209,10 @@ class CycleGAN():
 
         if normalisation.lower() == 'instance':
             Normalization = InstanceNormalization
+
         elif normalisation.lower() == 'batch':
             Normalization = BatchNormalization
+
         else:
             raise ValueError("Invalid value for normatlization method: {!r}".format(normalisation))
 
@@ -206,6 +227,7 @@ class CycleGAN():
                 # Transforming then Upsampling
                 res = resnet_transformer(d4, self.gf*8, transformer_layers)
                 u1 = deconv2d(res, d3, self.gf*4, architecture=architecture)
+
         else:
             # Upsampling only
             u1 = deconv2d(d4, d3, self.gf*4, architecture=architecture)
@@ -235,6 +257,7 @@ class CycleGAN():
 
         def d_layer(layer_input, filters, f_size=4, normalization=True):
             """Discriminator CNN layer"""
+
             nonlocal Normalization
 
             d = Conv2D(filters, kernel_size=f_size, strides=2, padding='same')(layer_input)
@@ -248,8 +271,10 @@ class CycleGAN():
         # Sets normalization value
         if normalisation.lower() == 'instance':
             Normalization = InstanceNormalization
+
         elif normalisation.lower() == 'batch':
             Normalization = BatchNormalization
+
         else:
             raise ValueError("Invalid value for normatlization method: {!r}".format(normalization))
         
@@ -287,32 +312,40 @@ class CycleGAN():
             raise ValueError("Invalid output type for discriminator: '{}'".format(D_output))
 
     
+    def train(self, *args, **kwargs):
+        "Virtual method to by implemented by daughters classes"
+
+        raise NotImplementedError("Must be implemented in daughter class")
+
+
     def sample_images(self, epoch, batch_i):
         """Samples images from the validation set and predicts net output on them for visual evaluation"""
 
         os.makedirs("images/{}".format(self.dataset_name), exist_ok=True)
         r, c = 2, 3
 
-        imgs_SPC = self.data_loader.load_data(contrast='spc', batch_size=1)
-        imgs_IV = self.data_loader.load_data(contrast='iv', batch_size=1)
+        imgs_A = self.data_loader.load_data(contrast=self.data_contrasts[0], batch_size=1)
+        imgs_B = self.data_loader.load_data(contrast=self.data_contrasts[1], batch_size=1)
 
         # Translate images to the other domain
-        fake_IV = self.g_AB.predict(imgs_SPC)
-        fake_SPC = self.g_BA.predict(imgs_IV)
+        fake_B = self.g_AB.predict(imgs_A)
+        fake_A = self.g_BA.predict(imgs_B)
+
         # Translate back to original domain
-        reconstr_SPC = self.g_BA.predict(fake_IV)
-        reconstr_IV = self.g_AB.predict(fake_SPC)
+        reconstr_A = self.g_BA.predict(fake_B)
+        reconstr_B = self.g_AB.predict(fake_A)
 
         # Squeeze the batch_size dim of the data
-        gen_imgs = [imgs_SPC, fake_IV, reconstr_SPC, imgs_IV, fake_SPC, reconstr_IV]
+        gen_imgs = [imgs_A, fake_B, reconstr_A, imgs_B, fake_A, reconstr_B]
         gen_imgs = [np.squeeze(img, axis=0) for img in gen_imgs]
 
         titles = ['Original', 'Translated', 'Reconstructed']
-        contrast = ['SPC', 'IV']
+        contrast = [cont.upper() for cont in self.data_contrasts]
 
         fig, axs = plt.subplots(r, c)
         for i in range(r):
             for j in range(c):
+
                 # Plot soft Tissue contrast only
                 if self.channels == 1:
                     axs[i,j].imshow(np.squeeze(gen_imgs[i*c +j], axis=-1), cmap='gray')
@@ -330,6 +363,7 @@ class CycleGAN():
             print("Saving to: /images/{}/{}_{}.png".format(self.dataset_name, epoch, batch_i))
             fig.savefig("images/%s/%d_%d.png" % (self.dataset_name, epoch, batch_i), dpi=400)
             plt.close()
+
         else:
             print("Could not save model")
 
@@ -344,19 +378,24 @@ class CycleGAN():
             RETURNS: 
                 trans_volume (np.array): transformed volume"""
 
-        if contrast.lower() == 'spc':
+        if contrast.lower() == self.data_contrasts[0].lower():
             generator = self.g_AB
-        elif contrast.lower() == 'iv':
+
+        elif contrast.lower() == self.data_contrasts[1].lower():
             generator = self.g_BA
+
         else:
-            raise ValueError("Invalid value for contrast: {} should be 'spc' or 'iv'".format(contrast))
+            raise ValueError("Invalid value for contrast: {!r}".format(contrast))
 
         pred_volume = np.empty_like(volume)
         slc = [slice(None)] *len(volume.shape)
+
         for i in range(volume.shape[axis]):
+
             print("\rSlice: {:3>d}".format(i), end='')
             slc[axis] = slice(i,i+1)
             pred_volume[tuple(slc)] = generator.predict(volume[tuple(slc)])
+
         print('')
         
         return pred_volume
@@ -368,6 +407,7 @@ class CycleGAN():
         if epoch == 0:
             self.progress = {}
             self.progress['epochs'] = [epoch]
+
         else:
             self.progress['epochs'].append(epoch)
 
@@ -377,9 +417,11 @@ class CycleGAN():
 
         fig, ax = plt.subplots(1, 1, figsize=(10, 10))
         for i, (key, value) in enumerate(zip(['D_loss', 'D_accuracy', 'G_loss', 'G_adv', 'G_recon'],
-                              [D_loss, D_accuracy, G_loss, G_adv, G_recon])):
+                                             [D_loss, D_accuracy, G_loss, G_adv, G_recon])):
+
             if epoch == 0:
                 self.progress[key] = [value]
+
             else:
                 self.progress[key].append(value)
 
@@ -398,9 +440,11 @@ class CycleGAN():
         if self.save_state:
             try:
                 os.makedirs(folderpath, exist_ok=True)
+
             except:
                 print("Could not create dir: '{}'".format(folderpath))
                 raise 
+
             print("Saving model to: {}".format(folderpath))
 
             json_dict = {}
@@ -442,10 +486,8 @@ class CycleGAN():
 
         def const_lr(epoch):
             """Constant learning rate"""
-            if epoch > max_epoch:
-                return 0.0
-            else:
-                return initial_lr
+           
+            return initial_lr if epoch <= max_epoch else 0.0
 
         def compute_lr(epoch):
             """Linearly decreasing learning rate after cutoff epoch"""
@@ -458,8 +500,10 @@ class CycleGAN():
 
         if how is None:
             return const_lr
+
         elif how == 'linear':
             return compute_lr
+
         else:
             raise NotImplementedError
 
@@ -488,6 +532,7 @@ class CycleGAN():
 
     @staticmethod
     def soft_D_target(batch_size, dim, channels):
+        """Softens the target of the net (Not used!)"""
 
         x, y = np.meshgrid(np.linspace(-1,1, dim[0]), np.linspace(-1,1, dim[1]))
         d = np.sqrt(x*x+y*y)
@@ -506,7 +551,8 @@ class CycleGAN():
 class BasicCycleGAN(CycleGAN):
 
     def __init__(self, **kwargs):
-        super(BasicCycleGAN, self).__init__(name='BasicCycleGAN', **kwargs)
+
+        super(BasicCycleGAN, self).__init__('BasicCycleGAN', **kwargs)
 
         # Network Losses, d_loss set in super
         self.cycle_loss = 'mae'
@@ -645,6 +691,7 @@ class BasicCycleGAN(CycleGAN):
 class PairedLossCycleGAN(CycleGAN):
 
     def __init__(self, **kwargs):
+
         super(PairedLossCycleGAN, self).__init__('PairedLossCycleGAN', **kwargs)
 
         # Network Losses, d_loss set in super
@@ -780,6 +827,7 @@ class PairedLossCycleGAN(CycleGAN):
 class CMapCycleGAN(CycleGAN):
 
     def __init__(self, **kwargs):
+        
         super(CMapCycleGAN, self).__init__('CMapCycleGAN', **kwargs)
 
         # Loss weights
