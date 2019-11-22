@@ -33,7 +33,7 @@ SimpleITK
 skimage
 skimage.external.tifffile  
 nibabel  
-pydicom
+pydicom  
 pystackreg  
-scipy
-matplotlib
+scipy  
+matplotlib  
