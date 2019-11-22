@@ -14,9 +14,9 @@ def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='l
             volume (np.array): input stack of images to rescale, dims don't matter for the windowing, for sigmoid recontruction last dim must be channels (contrasts)
                 vol.shape = [x,y,z, channels]
 
-            rescale intercept (int/float): Origin real value for recontruction of true Houndsfield units 
+            rescale intercept (int/float): Origin real value for recontruction of/from true Houndsfield units 
 
-            rescale_slope (float): Linear slope coefficient for recontruction of true Houndsfield units
+            rescale_slope (float): Linear slope coefficient for recontruction of/from true Houndsfield units
 
             method (str): contrast method for rescaling/reconstruction, must be in ['linear', 'sigmoid', 'inv_sigmoid']
 
@@ -36,6 +36,7 @@ def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='l
         # Value clipping for extremas
         rescaled_volume[rescaled_volume < 0] = 0
         rescaled_volume[rescaled_volume > 1] = 1
+
         return rescaled_volume
 
     def sigmoid_rescale(volume, width, level):
@@ -46,18 +47,16 @@ def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='l
     def inv_sig_rescale(volume, width, level):
         """Revertes the sigmoid rescaling given 'level' and 'width' """
 
-        # float32 precision
-        # epsilon32 = np.finfo(np.float32).eps
-        # float64 precision
         epsilon = np.finfo(np.float).eps
         # Shifts the extramas values {0, 1} by epsilon to avoid ZeroDivision and log(0)
         volume[volume <= epsilon] = epsilon
         volume[volume >= 1 -epsilon] = 1 -epsilon
+
         return (-width *np.log(1./volume -1) +level)
 
     #(win_width, win_level)
-    windows_lin = {'lung': (1800., -600.), 'soft': (400., 50.), 'bone': (1800., 400.)}
-    windows_sig = {'lung': (200., -500.), 'soft': (80., 50.), 'bone': (150., 350.)}
+    # windows_lin = {'lung': (1800., -600.), 'soft': (400., 50.), 'bone': (1800., 400.)}
+    # windows_sig = {'lung': (200., -500.), 'soft': (80., 50.), 'bone': (150., 350.)}
 
     # New window params after trials
     windows_lin = {'lung': (560., 80.), 'soft': (570., 950.), 'bone': (400., 1100.)}
@@ -86,7 +85,7 @@ def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='l
         inv_conts = []
         for i, c in enumerate(contrast):
             inv_cont = inv_sig_rescale(volume[...,i].astype('float64'), windows_sig[c][0], windows_sig[c][1])
-            # Rescaling from Houndsfield Units to uint range /!\ Values may be < 0 due to numerical imprecisions best to clip the values later
+            # Rescaling from Houndsfield Units to uint range /!\ Values may be < 0 due to numerical imprecisions best to clip the values outside
             inv_cont /= float(rescale_slope)
             inv_cont -= rescale_intercept                
             inv_conts.append(inv_cont)
@@ -94,7 +93,7 @@ def tissue_contrast(volume, rescale_intercept=-1024, rescale_slope=1., method='l
         return np.stack(inv_conts, axis=3)
 
     else:
-        raise ValueError("'method' must be 'linear', 'sigmoid' or 'inv_sigmoid', is: {!r}".format(method))
+        raise ValueError(f"'method' must be 'linear', 'sigmoid' or 'inv_sigmoid', is: {method!r}")
 
     return np.stack(conts, axis=3)
 
@@ -115,7 +114,7 @@ def rough_coregister(ref_volume, realign_volume, affine_transform, axis=2):
             ref_volume, rescaled_volume: arrays of realigned volumes with the same dimensions from the input volumes"""
 
     # Vertical shift in nbre of voxels (slice_delta = mm_delta /slice_height[in mm])
-    shift = -int(affine_transform[2, -1] /affine_transform[2,2]) 
+    shift = -int(affine_transform[2,-1] /affine_transform[2,2]) 
 
     # Selects the shared slices
     if shift >= 0:
@@ -127,9 +126,9 @@ def rough_coregister(ref_volume, realign_volume, affine_transform, axis=2):
 
     # Initializes the pystackreg affine transform (only slice wise wise translation)
     sr = StackReg(StackReg.AFFINE)
-    aff_transform = np.array([[affine_transform[0,0], 0, affine_transform[0,0] *affine_transform[0,-1]], 
-                                    [0, affine_transform[1,1],  affine_transform[1,1] *affine_transform[1,-1]], 
-                                    [0, 0, 1]])
+    aff_transform = np.array([[affine_transform[0, 0], 0, affine_transform[0, 0] * affine_transform[0, -1]],
+                              [0, affine_transform[1, 1],  affine_transform[1, 1] * affine_transform[1, -1]],
+                              [0, 0, 1]])
     
     slc = [slice(None)] *len(ref_volume)
     rescaled_volume = np.zeros_like(realign_volume)
@@ -217,8 +216,8 @@ def coregister(ref_volume, moving_volume, fill_value=-1024, resampling_only=Fals
             sys.stdout = log
             
             # prints usefull info
-            print("Optimizer's stopping condition, {0}".format(registration_method.GetOptimizerStopConditionDescription()))
-            print("Final metric value: {0}".format(registration_method.GetMetricValue()), end='\n'*2)
+            print("Optimizer's stopping condition, {}".format(registration_method.GetOptimizerStopConditionDescription()))
+            print("Final metric value: {}".format(registration_method.GetMetricValue()), end='\n'*2)
             print(optimized_transform)
             print('\n'*2, "Transforms (0,0,0) to: {}".format(optimized_transform.TransformPoint((0.0, 0.0, 0.0))))
 
@@ -251,5 +250,5 @@ def coregister(ref_volume, moving_volume, fill_value=-1024, resampling_only=Fals
     
     # Computes valid slice to not have empty images
     valid_slices = slice(shift, moving_volume.GetDepth() -shift)
-    print(valid_slices)
+    
     return ref_volume[:,:, valid_slices], moving_coreg[:,:, valid_slices]

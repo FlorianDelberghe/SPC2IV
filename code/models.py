@@ -36,7 +36,40 @@ plt.rcParams['image.cmap'] = 'gray'
 
 
 class CycleGAN():
-    """Mother class for the different types of GANs"""
+    """Mother class for the different types of GANs
+        ARGUMENTS:
+            name (str): name of the Network used for saving purposes
+        
+        K_ARGUMENTS:
+            save_state (bool): Whether the network whould save its state_dict every 5 epochs, also makes it override the image and model saving folders once started!
+
+            input_res (tuple(int)): resolution of the input images (x, y)
+
+            n_channels (int): number of channels of the input images
+
+            dataset_name (str): path to where the data set is located given to the data_loader see data_loader.__doc__
+
+            data_process (str): how to process the images before training on them (for the DataLoaderDICOM) uses the windowing of processing.tissue_contrasts()
+
+            data_contrasts (list(str)): list with len() == 2 the 2 contrast on which to train the network ['A', 'B']
+
+            load_from (str): Chooses the DICOM or png data_loader
+
+            g_filters (int): base number of filters in the first layer of the Generator
+
+            d_filters (int): base number of filters in the first layer of the Discriminator
+
+            D_loss (float): weight to ponderate the D_loss loss by
+
+            cycle_loss_weight float weight to ponderate the cycle_loss_weight loss by
+
+            D_loss_weight (float weight to ponderate the D_loss_weight loss by
+
+            initial_lr (float): base learning rate value
+
+            start_epoch (int): epoch to start with (used when restarting a pretrained network)
+
+            """
 
     def __init__(self, name, **kwargs):
         """Sets the basic parameters that are common to all of the GANs"""
@@ -132,6 +165,7 @@ class CycleGAN():
 
     def __str__(self):
         return self.__repr__()
+
 
     def build_generator(self, out_activation='tanh', architecture='unet',
                         transformer_layers=None, normalisation='instance', **kwargs):
@@ -549,6 +583,13 @@ class CycleGAN():
 #------------------------------------------------------------#
 
 class BasicCycleGAN(CycleGAN):
+    """Used CycleGAN architecture with the best training and testing performances from https://arxiv.org/abs/1703.10593
+        K_ARGUMENTS:
+            id_loss_weight (float): weight of the id_loss used to constrain the network to reduce the alterations on the predicted images
+            optimizer_scheduler (str): how the learning rate will change over time for the last round of training
+            cutoff_epoch (int): epoch at which the lr will start to be altered
+            max_epochs (int): max number of epochs to do on the data
+    """
 
     def __init__(self, **kwargs):
 
@@ -689,6 +730,8 @@ class BasicCycleGAN(CycleGAN):
 #------------------------------------------------------------#
 
 class PairedLossCycleGAN(CycleGAN):
+    """Similar architecture to the BasicCycleGAN, difference is in the training, this nets requieres coregistered images in both contrasts.
+        As well as the discriminator loss on the fake contrast, we also add a requierement for it to be close to the coregistered image in the other contrast"""
 
     def __init__(self, **kwargs):
 
@@ -820,8 +863,8 @@ class PairedLossCycleGAN(CycleGAN):
                 "models/{}".format(self.dataset_name), 'final_iv_pred.tif', bit_depth=32)
 
 #------------------------------------------------------------#
-#
-#
+# GANs after this part are not garanted to work, they are proof of concept that were
+# unfruitful and were abandoned early on
 #------------------------------------------------------------#
 
 class CMapCycleGAN(CycleGAN):

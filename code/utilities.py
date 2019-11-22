@@ -63,7 +63,7 @@ def load_patient_path(data_path):
 
 
 def load_dcm_meta(filepath, contrast):
-    """Loads usefull metadata from a dicom image, builds affine image2world affine transform"""
+    """Loads usefull metadata from a dicom image, builds image2world affine transform"""
 
     ds = pydicom.dcmread(filepath)
     metadata = {}
@@ -169,25 +169,21 @@ def save_volume(volume, folder_path, filename, axis=0, bit_depth=8, **kwargs):
             image = np.squeeze(image)
 
             # Rescales image from [min, max] -> [0, 255]
-            try:
-                assert image.min() >= 0, "Min of img is: {}, clipping pixel values".format(image.min())
-
-            # TODO AssertionError aren't reliable when debug=False (production)
-            except AssertionError:
+            if (image < 0).any():
+                print(f"Min of img is: {iamge.min()}, clipping pixel values")
                 image[image < 0] = 0
+           
+            # One channel image
+            if len(image.shape) == 2:                    
+                return (image /image.max() *(2**bit_depth -1)).astype(array_dtype)
 
-            finally:
-                # One channel image
-                if len(image.shape) == 2:                    
-                    return (image /image.max() *(2**bit_depth -1)).astype(array_dtype)
+            # Multi channels image
+            elif len(image.shape) == 3 and volume.shape[-1] == 3:                    
+                norm_channels = [(image[...,i] /image[...,i].max() *(2**bit_depth -1)).astype(array_dtype) for i in range(image.shape[-1])]
+                return np.stack(norm_channels, axis=-1)
 
-                # Multi channels image
-                elif len(image.shape) == 3 and volume.shape[-1] == 3:                    
-                    norm_channels = [(image[...,i] /image[...,i].max() *(2**bit_depth -1)).astype(array_dtype) for i in range(image.shape[-1])]
-                    return np.stack(norm_channels, axis=-1)
-
-                else:
-                    raise ValueError("Dimension error for volume n_channel(s): {}".format(image.shape[-1]))
+            else:
+                raise ValueError("Dimension error for volume n_channel(s): {}".format(image.shape[-1]))
 
         elif bit_depth == 16:
             # Clips weights outside of range [uint16_min, int16_max] return unchanged pixel values otherwise
@@ -196,10 +192,15 @@ def save_volume(volume, folder_path, filename, axis=0, bit_depth=8, **kwargs):
             return image.astype('uint16')
 
         else:
-            raise ValueError("Wrong value for bit_depth: {} should be 8, 16, 32".format(bit_depth))
+            raise ValueError(f"Wrong value for bit_depth: {bit_depth} should be 8, 16, 32")
 
     # Finds the wanted saving format
-    file_format = filename.split('.')[-1] if filename.split('.')[-1] in ['png', 'tif', 'pkl'] else kwargs['file_format']
+    try:
+        file_format = filename.split('.')[-1] if filename.split('.')[-1] in ['png', 'tif', 'pkl'] else kwargs['file_format']
+    except KeyError:
+        print("File format could not be infered from filename or 'file_format' kwarg")
+        raise
+
     create_dir(folder_path)
 
     # Saves volume to serie of .png images in a new folder
@@ -227,7 +228,7 @@ def save_volume(volume, folder_path, filename, axis=0, bit_depth=8, **kwargs):
         raise ValueError("Unsupported file format: {}".format(file_format))
 
 
-def load_dcm_serie(serie_path, return_reader=False, return_type='sitk'):
+def load_dcm_serie(serie_path, return_reader=False):
     """Loads a DICOM serie using SimpleITK
         PARAMS: 
             serie_path (str): path to the requiered serie
@@ -246,7 +247,7 @@ def load_dcm_serie(serie_path, return_reader=False, return_type='sitk'):
     reader.MetaDataDictionaryArrayUpdateOn()
     reader.LoadPrivateTagsOn()
     
-    print("Loading serie at: {:s}".format(serie_path))
+    print(f"Loading serie at: {serie_path}")
     dcm_serie = reader.Execute()
     # Sets the spacing with the 'SliceThickness' MetaData as it can be wrongfully initialized (read metadeta on slice 1!)
     dcm_serie.SetSpacing((*dcm_serie.GetSpacing()[:2], float(reader.GetMetaData(1, '0018|0050'))))
@@ -260,17 +261,18 @@ def load_dcm_serie(serie_path, return_reader=False, return_type='sitk'):
 def save2dicom(volume, reader, serie_description, folder_path, fileprefix):
     """Saves sitk image volume to dicom
         PARAMS:
-
-
-    """
+            volume (sitk image): Input volume as sitk image
+            reader (sitk image reader): reader to get the metadatafrom
+            serie_description ():
+            folder_path (str): folder where to store the files
+            fileprefix (str): filename to be followed by '_(n_slice)'"""
 
     create_dir(folder_path)
 
     writer = sitk.ImageFileWriter()
     writer.KeepOriginalImageUIDOn()
 
-    # Copy relevant tags from the original meta-data dictionary (private tags are also
-    # accessible).
+    # Copy relevant tags from the original meta-data dictionary (private tags are also accessible).
     tags_to_copy = ["0010|0010", # Patient Name
                     "0010|0020", # Patient ID
                     "0010|0030", # Patient Birth Date
@@ -304,7 +306,7 @@ def save2dicom(volume, reader, serie_description, folder_path, fileprefix):
          ("0028|1053", str(1.0)) # Rescale Slope
          ]
 
-    print("Saving to {}".format(folder_path))
+    print(f"Saving to {folder_path}")
     for i in range(volume.GetDepth()):
         image_slice = volume[:,:,i]
 

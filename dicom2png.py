@@ -1,4 +1,4 @@
-"""Loads DICOM images and saves to png for GAN training with different contrasts"""
+"""Loads DICOM images and saves to .png for GAN training with different contrasts"""
 
 import os
 import pathlib
@@ -22,7 +22,8 @@ def main():
         create_dir(OUT_PATH)
 
     patients = load_patient_path(DATA_PATH)
-    # Saves one every sampling interval
+
+    # Saves one slice every sampling interval
     sampling = 1
     contrasts = ['spc', 'art', 'iv', 'tard']
 

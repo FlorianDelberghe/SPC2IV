@@ -18,7 +18,7 @@ class DataLoader():
 
 
     def __repr__(self):
-        return "{}".format(self.name)
+        return f"{self.name}"
 
 
     def __str__(self):
@@ -28,14 +28,14 @@ class DataLoader():
 class DataLoaderCT(DataLoader):
     """GAN data_loader loading data from pre-processed image volumes saved to .png slices"""
 
-    def __init__(self, data_path, contrasts=['spc', 'iv'], image_res=(512, 512), n_channels=1, one_in_x=10):
+    def __init__(self, data_path, contrasts=['spc', 'iv'], image_res=(512, 512), n_channels=1, sampling=10):
         super(DataLoaderCT, self).__init__('DataLoaderCT')
 
         self.data_path = data_path
         self.contrasts = contrasts
         self.img_res = image_res
         self.n_channels = n_channels
-        self.one_in_x = one_in_x
+        self.sampling = sampling
         
         # Sets one of the folder as the testing dataset
         self.patients = [p for p in os.listdir(self.data_path) if not p.startswith('.')]
@@ -134,7 +134,7 @@ class DataLoaderCT(DataLoader):
             data = [self.load_image(file) for file in self.val_B_files[np.random.choice(len(self.val_B_files), batch_size)]]
 
         else:
-            raise ValueError("Wrong contrast: {}".format(contrast))
+            raise ValueError(f"Wrong contrast: {contrast}")
 
         return np.array(data)
 
@@ -149,18 +149,19 @@ class DataLoaderCT(DataLoader):
         A_ind = np.random.choice(len(self.tr_A_files), total_samples)
         B_ind = np.random.choice(len(self.tr_B_files), total_samples)
 
-        for i in range(0, self.n_batches, self.one_in_x):
+        for i in range(0, self.n_batches, self.sampling):
 
             A_imgs = [self.load_image(file) for file in self.tr_A_files[A_ind[i *batch_size:(i+1) *batch_size]]]
-            B_paired = [self.load_image(file) for file in self.tr_B_files[A_ind[i *batch_size:(i+1) *batch_size]]]
-            
             B_imgs = [self.load_image(file) for file in self.tr_B_files[B_ind[i *batch_size:(i+1) *batch_size]]]
-            A_paired = [self.load_image(file) for file in self.tr_A_files[B_ind[i *batch_size:(i+1) *batch_size]]]
 
-            if paired:
-                yield np.array(A_imgs), np.array(B_imgs), np.array(B_paired), np.array(A_paired)
-            else:
+            if not paired:
                 yield np.array(A_imgs), np.array(B_imgs)
+
+            else:
+                B_paired = [self.load_image(file) for file in self.tr_B_files[A_ind[i *batch_size:(i+1) *batch_size]]]            
+                A_paired = [self.load_image(file) for file in self.tr_A_files[B_ind[i *batch_size:(i+1) *batch_size]]]
+
+                yield np.array(A_imgs), np.array(B_imgs), np.array(B_paired), np.array(A_paired)
 
 
     def load_test(self, contrast, paired=False):
@@ -173,10 +174,9 @@ class DataLoaderCT(DataLoader):
             data = [self.load_image(file) for file in self.test_B_files]
 
         else:
-            raise ValueError("Unknown contrast: {!r}".format(contrast))
+            raise ValueError(f"Unknown contrast: {contrast!r}")
 
-        return np.stack(data, axis=0)
-        
+        return np.stack(data, axis=0)        
 
 
     def load_image(self, filepath, bit_depth=8):
@@ -207,7 +207,7 @@ class DataLoaderCT(DataLoader):
             return normalize(tifffile.imread(filepath), bit_depth)
 
         else:
-            raise ValueError("Wrong number of channels '{}'".format(self.n_channels))
+            raise ValueError(f"Wrong number of channels {self.n_channels}")
 
 #------------------------------------------------------------#
 #                                                            #
@@ -314,7 +314,7 @@ class DataLoaderDICOM(DataLoader):
         return np.concatenate(data, axis=0)
 
 
-    def load_batch(self, batch_size=1, paired=False):
+    def load_batch(self, batch_size=1):
         """Creates a generator that yields a single batch of the data for both contrasts"""
 
         self.n_batches = int(min(len(self.tr_spc_files), len(self.tr_iv_files)) /batch_size)

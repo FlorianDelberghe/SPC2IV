@@ -11,6 +11,7 @@ images/
 *.nii
 *.log
 *.gif
+*.pptx
 .*
 
 # Files

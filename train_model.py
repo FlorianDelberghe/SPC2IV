@@ -1,16 +1,12 @@
 import os
-import shutil
-import sys
 
 import keras
-import matplotlib.pyplot as plt
 import numpy as np
 import skimage.external.tifffile as tifffile
 import tensorflow as tf
 from keras.backend.tensorflow_backend import set_session
 
-from code.data_loader import DataLoaderCT
-from code.models import BasicCycleGAN, CMapCycleGAN, PairedLossCycleGAN, ResCycleGAN
+from code.models import BasicCycleGAN, CMapCycleGAN
 
 
 def main():
